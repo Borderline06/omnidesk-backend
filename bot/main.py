@@ -3,10 +3,12 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from bot.config import TELEGRAM_TOKEN
 from bot.handlers import start_command, echo_message
 
-# Configurar logs profesionales
+# Configurar log
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
+logging.getLogger("httpx").setLevel(logging.WARNING)
+
 logger = logging.getLogger(__name__)
 
 def main():
