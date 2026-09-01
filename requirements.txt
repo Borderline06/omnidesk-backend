@@ -1,2 +1,9 @@
 python-telegram-bot==21.1.1
 python-dotenv==1.0.1
+
+# API
+fastapi==0.141.1
+uvicorn==0.52.4
+
+# HTTP Client
+requests==2.34.2
