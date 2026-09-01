@@ -5,26 +5,5 @@
         "Mensaje": "Mi PC está sin internet",
         "Estado": "Abierto",
         "Nivel_Gravedad": "Alta"
-    },
-    {
-        "Usuario": "Hola",
-        "Mensaje": "Mi PC se callo",
-        "Estado": "Abierto",
-        "Nivel_Gravedad": "Media",
-        "ID": 2
-    },
-    {
-        "Usuario": "Jhordy",
-        "Mensaje": "Mi wifi no da",
-        "Estado": "Abierto",
-        "Nivel_Gravedad": "Media",
-        "ID": 3
-    },
-    {
-        "Usuario": "Jhordy",
-        "Mensaje": "Milagros",
-        "Estado": "Abierto",
-        "Nivel_Gravedad": "Media",
-        "ID": 4
     }
 ]
