@@ -17,9 +17,16 @@ def faq_keyboard():
     return InlineKeyboardMarkup(keyboard)
 
 def faq_respuesta_keyboard():
-    """Se muestra tras dar la respuesta rápida si no se solucionó el problema."""
     keyboard = [
         [InlineKeyboardButton(" Reportar este Problema", callback_data="reportar_problema")],
         [InlineKeyboardButton("« Volver al Menú", callback_data="menu_principal")]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+def solucion_confirmar_keyboard():
+    """Teclado de validación tras una propuesta de la IA."""
+    keyboard = [
+        [InlineKeyboardButton(" Sí, se solucionó", callback_data="solucion_si")],
+        [InlineKeyboardButton(" No, intentar otra solución", callback_data="solucion_no")]
     ]
     return InlineKeyboardMarkup(keyboard)

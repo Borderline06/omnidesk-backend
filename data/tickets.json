@@ -5,5 +5,12 @@
         "Mensaje": "Mi PC está sin internet",
         "Estado": "Abierto",
         "Nivel_Gravedad": "Alta"
+    },
+    {
+        "Usuario": "SH4M1R",
+        "Mensaje": "Tengo problemas de internet con mi laptop",
+        "Estado": "En Proceso",
+        "Nivel_Gravedad": "Media",
+        "ID": 2
     }
 ]

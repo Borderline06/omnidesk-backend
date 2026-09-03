@@ -1,7 +1,6 @@
 import json
 from pathlib import Path
-
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 router = APIRouter()
 
@@ -27,9 +26,7 @@ def crear_ticket(ticket: dict):
         tickets = json.load(archivo)
 
     nuevo_id = len(tickets) + 1
-
     ticket["ID"] = nuevo_id
-
     tickets.append(ticket)
 
     with open(RUTA_TICKETS, "w", encoding="utf-8") as archivo:
@@ -38,4 +35,29 @@ def crear_ticket(ticket: dict):
     return {
         "mensaje": "Ticket creado correctamente",
         "ticket": ticket
+    }
+
+
+@router.put("/tickets/{ticket_id}")
+def actualizar_estado_ticket(ticket_id: int, payload: dict):
+    """Actualiza el estado de un ticket existente por su ID."""
+    with open(RUTA_TICKETS, "r", encoding="utf-8") as archivo:
+        tickets = json.load(archivo)
+
+    ticket_encontrado = None
+    for ticket in tickets:
+        if ticket.get("ID") == ticket_id:
+            ticket["Estado"] = payload.get("Estado", ticket.get("Estado"))
+            ticket_encontrado = ticket
+            break
+
+    if not ticket_encontrado:
+        raise HTTPException(status_code=404, detail="Ticket no encontrado")
+
+    with open(RUTA_TICKETS, "w", encoding="utf-8") as archivo:
+        json.dump(tickets, archivo, ensure_ascii=False, indent=4)
+
+    return {
+        "mensaje": "Estado del ticket actualizado correctamente",
+        "ticket": ticket_encontrado
     }
