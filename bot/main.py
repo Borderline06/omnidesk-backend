@@ -3,7 +3,7 @@ import asyncio
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
 from bot.config import TELEGRAM_TOKEN
-from bot.handlers import start_command, echo_message, cerrar_command
+from bot.handlers import start_command, echo_message
 from core.db import init_db
 
 # Configurar logs
@@ -28,7 +28,6 @@ def main():
     
     # 3. Registrar los manejadores
     app.add_handler(CommandHandler("start", start_command))
-    app.add_handler(CommandHandler("cerrar", cerrar_command))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, echo_message))
     
     logger.info("Bot en línea y escuchando. Presiona Ctrl+C para detener.")
