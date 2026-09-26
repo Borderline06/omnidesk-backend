@@ -52,3 +52,24 @@ async def responder_seguimiento_ia(texto):
     except Exception as e:
         logger.error(f"Fallo en Gemini (seguimiento): {e}")
         return "Mantenga la calma y siga las instrucciones iniciales. El técnico está en camino."
+
+
+async def transcribir_audio(audio_bytes: bytes, mime_type: str = "audio/ogg"):
+    """Transcribe un audio a texto usando la capacidad multimodal nativa de Gemini.
+    No requiere Whisper ni conversión de formato: Gemini acepta OGG/Opus
+    (el formato de las notas de voz de Telegram) directamente.
+
+    Devuelve el texto transcrito, o None si falla.
+    """
+    try:
+        response = await model.generate_content_async([
+            "Transcribe este audio a texto de forma literal, en español. "
+            "Devuelve ÚNICAMENTE la transcripción, sin comentarios, sin introducciones "
+            "y sin comillas alrededor del texto.",
+            {"mime_type": mime_type, "data": audio_bytes},
+        ])
+        texto = response.text.strip()
+        return texto if texto else None
+    except Exception as e:
+        logger.error(f"Fallo al transcribir audio con Gemini: {e}")
+        return None
