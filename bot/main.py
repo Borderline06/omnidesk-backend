@@ -1,6 +1,7 @@
 import logging
 import asyncio
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
+from bot.handlers import procesar_audio_telegram
 
 from bot.config import TELEGRAM_TOKEN
 from bot.handlers import start_command, echo_message
@@ -29,6 +30,8 @@ def main():
     # 3. Registrar los manejadores
     app.add_handler(CommandHandler("start", start_command))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, echo_message))
+
+    app.add_handler(MessageHandler(filters.VOICE, procesar_audio_telegram))
     
     logger.info("Bot en línea y escuchando. Presiona Ctrl+C para detener.")
     app.run_polling()
