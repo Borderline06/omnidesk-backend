@@ -4,7 +4,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from bot.handlers import procesar_audio_telegram
 
 from bot.config import TELEGRAM_TOKEN
-from bot.handlers import start_command, echo_message
+from bot.handlers import start_command, historial_command, echo_message
 from core.db import init_db
 
 # Configurar logs
@@ -29,6 +29,7 @@ def main():
     
     # 3. Registrar los manejadores
     app.add_handler(CommandHandler("start", start_command))
+    app.add_handler(CommandHandler(["historial", "mis_tickets"], historial_command))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, echo_message))
 
     app.add_handler(MessageHandler(filters.VOICE, procesar_audio_telegram))
