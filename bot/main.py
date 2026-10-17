@@ -6,6 +6,8 @@ from bot.handlers import procesar_audio_telegram
 from bot.config import TELEGRAM_TOKEN
 from bot.handlers import start_command, historial_command, echo_message
 from core.db import init_db
+from core.mqtt_config import MQTT_ENABLED, MQTT_HOST, MQTT_PORT, MQTT_TOPIC
+from core.mqtt_subscriber import iniciar_suscriptor
 
 # Configurar logs
 logging.basicConfig(
@@ -19,7 +21,12 @@ def main():
     # 1. Crear la base de datos local
     init_db()
     logger.info("Base de datos SQLite lista y conectada.")
-    
+
+    # Suscriptor MQTT (hilo propio de paho): guarda la temperatura IoT en iot_metrics
+    if MQTT_ENABLED:
+        iniciar_suscriptor()
+        logger.info(f"Suscriptor MQTT iniciado hacia {MQTT_HOST}:{MQTT_PORT} (tópico {MQTT_TOPIC}).")
+
     # 2. Forzar el bucle de eventos
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)

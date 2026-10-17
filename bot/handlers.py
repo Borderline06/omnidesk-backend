@@ -1,4 +1,5 @@
 from telegram import ReplyKeyboardRemove, Update
+from telegram.error import BadRequest
 from telegram.ext import ContextTypes
 import csv
 import os
@@ -15,6 +16,7 @@ from core.db import (
 from core.ai_service import (
     analizar_incidente_ia, responder_seguimiento_ia,
     requiere_intervencion_tecnica, usuario_pide_tecnico, es_nuevo_incidente,
+    detectar_emergencia, generar_contenido_ia,
 )
 
 MENSAJE_REQUIERE_START = (
@@ -23,8 +25,9 @@ MENSAJE_REQUIERE_START = (
 )
 
 async def responder_ticket_inicial(update, ticket_id, categoria, urgencia, instruccion, escalado):
+    encabezado = "🚨 **URGENCIA ALTA**\n\n" if urgencia == "Alta" else ""
     respuesta = (
-        f"🛠️ **Asistencia inmediata:**\n{instruccion}\n\n"
+        f"{encabezado}🛠️ **Asistencia inmediata:**\n{instruccion}\n\n"
         f"✅ **Ticket #{ticket_id} registrado:**\n"
         f"• Categoría: {categoria}\n"
         f"• Urgencia: {urgencia}\n"
@@ -46,7 +49,17 @@ async def responder_ticket_inicial(update, ticket_id, categoria, urgencia, instr
         )
 
     guardar_mensaje(ticket_id, 'bot', respuesta)
-    await update.message.reply_text(respuesta, parse_mode="Markdown", reply_markup=ReplyKeyboardRemove())
+    try:
+        await update.message.reply_text(respuesta, parse_mode="Markdown", reply_markup=ReplyKeyboardRemove())
+    except BadRequest:
+        # La instrucción de la IA puede traer símbolos que rompen el Markdown de Telegram
+        await update.message.reply_text(respuesta.replace("**", ""), reply_markup=ReplyKeyboardRemove())
+
+def notificar_si_urgente(ticket_id, categoria, urgencia, texto):
+    """Registra en CSV y envía el correo cuando el ticket es de urgencia Alta."""
+    automatizar_registro_csv(ticket_id, categoria, urgencia, texto)
+    if urgencia == "Alta":
+        enviar_email_urgente(ticket_id, urgencia, texto)
 
 # --- AUTOMATIZACIÓN 1: REPORTE CSV ---
 def automatizar_registro_csv(ticket_id, categoria, urgencia, texto):
@@ -130,8 +143,22 @@ async def historial_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lineas.append("\nPara iniciar una consulta nueva, envía /start.")
     await update.effective_message.reply_text("\n".join(lineas))
 
+async def _atender_emergencia(update, ticket_id, texto):
+    """Mensaje de peligro con un ticket ya abierto: instrucción de seguridad inmediata y aviso por correo."""
+    _, urgencia, instruccion = await analizar_incidente_ia(texto)
+    actualizar_estado_ticket(ticket_id, 'Esperando técnico')
+    enviar_email_urgente(ticket_id, urgencia, texto)
+    respuesta = (
+        f"🚨 URGENCIA ALTA\n{instruccion}\n\n"
+        f"Escalé el ticket #{ticket_id} a un técnico, que continuará contigo por este chat."
+    )
+    guardar_mensaje(ticket_id, 'bot', respuesta)
+    await update.message.reply_text(respuesta, reply_markup=ReplyKeyboardRemove())
+
 async def echo_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    texto_usuario = update.message.text
+    await _procesar_texto(update, update.message.text)
+
+async def _procesar_texto(update: Update, texto_usuario: str):
     user_id = str(update.message.from_user.id)
     telegram_user = update.message.from_user
     username = f"@{telegram_user.username}" if telegram_user.username else (telegram_user.full_name or str(user_id))
@@ -145,6 +172,12 @@ async def echo_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if ticket_activo:
         ticket_id, estado, descripcion_actual = ticket_activo
+        # Un reporte de peligro (humo, fuego...) tiene prioridad sobre cualquier estado del flujo
+        if detectar_emergencia(texto_usuario) and estado != 'Esperando detalles':
+            guardar_mensaje(ticket_id, 'usuario', texto_usuario)
+            await _atender_emergencia(update, ticket_id, texto_usuario)
+            return
+
         if estado in ('Esperando técnico', 'En atención'):
             guardar_mensaje(ticket_id, 'usuario', texto_usuario)
             return
@@ -188,12 +221,16 @@ async def echo_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             actualizar_detalles_ticket(
                 ticket_id, descripcion_completa, categoria, urgencia, nuevo_estado
             )
+            if urgencia == "Alta":
+                enviar_email_urgente(ticket_id, urgencia, descripcion_completa)
 
             if escalado:
                 respuesta = (
                     f"🧑‍💻 Gracias, agregué los detalles al ticket #{ticket_id}. "
                     "Por este problema, continuará contigo un técnico por este chat."
                 )
+                if urgencia == "Alta":
+                    respuesta = f"🚨 URGENCIA ALTA\n{instruccion}\n\n{respuesta}"
                 sender = 'sistema'
             else:
                 respuesta = (
@@ -230,12 +267,12 @@ async def echo_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             respuesta = await responder_seguimiento_ia(texto_usuario)
             guardar_mensaje(ticket_id, 'bot', respuesta)
-            await update.message.reply_text(respuesta, parse_mode="Markdown")
+            await update.message.reply_text(respuesta)
             return
 
     escalado = await requiere_intervencion_tecnica(texto_usuario)
-    solicitud_directa = escalado
-    if len(texto_usuario) < 15 and not solicitud_directa:
+    # Un mensaje corto como "humo" o "fuego" no pide más detalle: es una emergencia
+    if len(texto_usuario) < 15 and not escalado and not detectar_emergencia(texto_usuario):
         await update.message.reply_text("⚠️ Por favor, detalla un poco más tu problema (mínimo 15 caracteres).")
         return
         
@@ -244,12 +281,8 @@ async def echo_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ticket_id = crear_ticket(user_id, username, texto_usuario, categoria, urgencia, estado)
     guardar_mensaje(ticket_id, 'usuario', texto_usuario)
     
-    # Ejecutar ambas automatizaciones en segundo plano
-    automatizar_registro_csv(ticket_id, categoria, urgencia, texto_usuario)
-    
-    if "alta" in urgencia.lower() or "crítico" in urgencia.lower():
-        enviar_email_urgente(ticket_id, urgencia, texto_usuario)
-    
+    notificar_si_urgente(ticket_id, categoria, urgencia, texto_usuario)
+
     await responder_ticket_inicial(update, ticket_id, categoria, urgencia, instruccion, escalado)
 
 async def procesar_audio_telegram(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -280,31 +313,25 @@ async def procesar_audio_telegram(update: Update, context: ContextTypes.DEFAULT_
         with open(ruta_temporal, "rb") as f:
             datos_audio = {"mime_type": "audio/ogg", "data": f.read()}
         
-        # 4. Procesar con Gemini 3.6 Flash
-        import google.generativeai as genai
-        import os
-        from dotenv import load_dotenv
-        
-        # Cargamos la llave del .env y configuramos esta instancia
-        load_dotenv()
-        genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-        
-        modelo = genai.GenerativeModel('gemini-3.6-flash')
-        instruccion_audio = (
-            "Transcribe literalmente el mensaje de voz. Devuelve solo la transcripción, sin responder ni resumir."
-            if en_atencion_humana else
-            "Eres el bot de soporte OmniDesk AI. Transcribe este problema del usuario y dale una solución técnica directa."
-        )
-        respuesta = modelo.generate_content([instruccion_audio, datos_audio])
-        
+        # 4. Transcribir con Gemini (misma IA y mismo cliente que el resto del bot, sin bloquear el loop)
+        transcripcion = (await generar_contenido_ia([
+            "Transcribe literalmente el mensaje de voz. Devuelve solo la transcripción, sin responder ni resumir.",
+            datos_audio,
+        ])).strip()
+        if not transcripcion:
+            await mensaje_espera.edit_text("❌ No pude entender el audio. Intenta de nuevo o escríbeme el problema.")
+            return
+
         if en_atencion_humana:
-            transcripcion = respuesta.text.strip()
             guardar_mensaje(ticket_activo[0], 'usuario', f"🎙️ Transcripción de audio: {transcripcion}")
             await mensaje_espera.edit_text("✅ Envié la transcripción al técnico. Puedes seguir escribiendo aquí.")
+            if detectar_emergencia(transcripcion):
+                await _atender_emergencia(update, ticket_activo[0], transcripcion)
         else:
-            # 5. Editar el mensaje inicial con la respuesta exitosa
-            await mensaje_espera.edit_text(f"✅ **Análisis de Audio:**\n\n{respuesta.text}", parse_mode="Markdown")
-        
+            # 5. La transcripción sigue el mismo flujo (y las mismas reglas de urgencia) que un mensaje de texto
+            await mensaje_espera.edit_text(f"🎙️ Entendí: {transcripcion}")
+            await _procesar_texto(update, transcripcion)
+
     except Exception as e:
         # 6. Si algo falla, usamos la misma variable para avisar del error
         await mensaje_espera.edit_text(f"❌ Error procesando el audio: {e}")

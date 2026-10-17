@@ -1,0 +1,87 @@
+services:
+  emqx:
+    image: emqx/emqx:latest
+    container_name: omnidesk-emqx
+    restart: unless-stopped
+    ports:
+      - "1883:1883"     # MQTT
+      - "8083:8083"     # MQTT sobre WebSocket
+      - "18083:18083"   # Dashboard EMQX (usuario: admin / contraseña: public)
+    volumes:
+      - emqx_data:/opt/emqx/data
+      - emqx_log:/opt/emqx/log
+    healthcheck:
+      test: ["CMD", "/opt/emqx/bin/emqx", "ctl", "status"]
+      interval: 10s
+      timeout: 10s
+      retries: 6
+
+  # Bot de Telegram + suscriptor MQTT: escribe tickets y lecturas IoT en omnidesk.db
+  bot:
+    build: .
+    container_name: omnidesk-bot
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      MQTT_HOST: emqx
+      MQTT_PORT: "1883"
+      DB_PATH: /app/data/omnidesk.db
+    depends_on:
+      emqx:
+        condition: service_healthy
+    volumes:
+      - db_data:/app/data
+
+  # Publica la temperatura simulada por MQTT; el bot (suscriptor) la guarda en la BD
+  iot-simulator:
+    build: .
+    container_name: omnidesk-iot-simulator
+    restart: unless-stopped
+    command: ["python", "-m", "core.iot_simulator"]
+    environment:
+      MQTT_HOST: emqx
+      MQTT_PORT: "1883"
+    depends_on:
+      emqx:
+        condition: service_healthy
+
+  # Dashboard Streamlit (repo hermano ../omnidesk-dashboard)
+  frontend:
+    build: ../omnidesk-dashboard
+    container_name: omnidesk-frontend
+    restart: unless-stopped
+    env_file: .env    # TELEGRAM_TOKEN (chat técnico) y, si existen, OMNIDESK_COOKIE_SECRET / OMNIDESK_ADMIN_PASSWORD
+    ports:
+      - "8501:8501"
+    depends_on:
+      - bot
+    volumes:
+      # El dashboard resuelve la BD como <padre de /app>/omnidesk-backend/omnidesk.db
+      # (APP_DIR.parent / "omnidesk-backend" / "omnidesk.db" en app.py), o sea /omnidesk-backend/omnidesk.db.
+      # Montamos el mismo volumen que usa el bot ahí para no modificar el código del dashboard.
+      - db_data:/omnidesk-backend
+
+  # Grafana: panel de temperaturas leyendo omnidesk.db (plugin SQLite) del volumen compartido
+  grafana:
+    image: grafana/grafana:latest
+    container_name: omnidesk-grafana
+    restart: unless-stopped
+    user: "0"   # el bot crea la BD como root y SQLite en modo WAL necesita escribir el archivo -shm al leer
+    ports:
+      - "3000:3000"
+    environment:
+      GF_PLUGINS_PREINSTALL_SYNC: frser-sqlite-datasource
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+    depends_on:
+      - bot
+    volumes:
+      - db_data:/var/lib/omnidesk
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+
+volumes:
+  db_data:
+  grafana_data:
+  emqx_data:
+  emqx_log:

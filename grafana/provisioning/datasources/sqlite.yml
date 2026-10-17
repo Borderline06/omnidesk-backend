@@ -1,0 +1,12 @@
+apiVersion: 1
+
+datasources:
+  - name: OmniDesk SQLite
+    uid: omnidesk-sqlite
+    type: frser-sqlite-datasource
+    access: proxy
+    isDefault: true
+    editable: true
+    jsonData:
+      # Ruta de omnidesk.db dentro del contenedor de Grafana (volumen db_data)
+      path: /var/lib/omnidesk/omnidesk.db

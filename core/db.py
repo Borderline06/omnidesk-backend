@@ -1,8 +1,14 @@
+import os
 import sqlite3
 from datetime import datetime
 
+DB_PATH = os.getenv("DB_PATH", "omnidesk.db")
+
 def get_connection():
-    return sqlite3.connect("omnidesk.db")
+    # timeout: el bot y el suscriptor MQTT escriben en la misma BD desde hilos distintos
+    conn = sqlite3.connect(DB_PATH, timeout=10)
+    conn.execute("PRAGMA journal_mode=WAL")
+    return conn
 
 def init_db():
     """Inicializa las tablas de la base de datos."""

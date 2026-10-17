@@ -11,3 +11,6 @@ __pycache__/
 
 # Configuraciones locales del editor
 .vscode/
+# SQLite WAL
+*.db-wal
+*.db-shm
